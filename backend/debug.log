@@ -1,0 +1,7 @@
+Loading model from best_hybrid_model.pth...
+Model loaded successfully.
+
+--- Running Inference Tests ---
+Input: Random Noise | Output Logit: 9.9642 | Probability: 1.0000 | Prediction: Defect
+Input: Black Image  | Output Logit: 6.9842 | Probability: 0.9991 | Prediction: Defect
+Input: White Image  | Output Logit: 1.2405 | Probability: 0.7757 | Prediction: Defect
