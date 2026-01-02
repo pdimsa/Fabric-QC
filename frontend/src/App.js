@@ -57,7 +57,12 @@ function App() {
                     'Content-Type': 'multipart/form-data',
                 },
             });
-            setResult(response.data);
+
+            if (response.data.error) {
+                setError(response.data.error);
+            } else {
+                setResult(response.data);
+            }
         } catch (err) {
             console.error(err);
             setError('Analysis failed. Please check your connection to the server.');
@@ -89,7 +94,7 @@ function App() {
             <main className="main-content">
                 <div className="card upload-card">
                     <h2>Defect Detection</h2>
-                    <p className="subtitle">Upload a fabric sample to analyze for defects.</p>
+                    <p className="subtitle">Upload a fabric sample to analyze for defects using our GAN-augmented ResNet50 model.</p>
 
                     <div
                         className={`drop-zone ${dragActive ? 'active' : ''} ${preview ? 'has-preview' : ''}`}
@@ -138,6 +143,7 @@ function App() {
 
                 {result && (
                     <div className={`card result-card ${result.prediction.toLowerCase()}`}>
+                        {/* Header */}
                         <div className="result-header">
                             <h3>Analysis Result</h3>
                             <span className={`status-badge ${result.prediction.toLowerCase()}`}>
@@ -145,29 +151,61 @@ function App() {
                             </span>
                         </div>
 
-                        <div className="result-details">
-                            <div className="metric">
-                                <span className="metric-label">Confidence</span>
-                                <div className="progress-bar-bg">
-                                    <div
-                                        className="progress-bar-fill"
-                                        style={{ width: result.confidence }}
-                                    ></div>
-                                </div>
-                                <span className="metric-value">{result.confidence}</span>
-                            </div>
-
-                            <div className="metric-row">
-                                <span className="metric-label">Probability Score</span>
-                                <span className="metric-value monospace">{result.probability.toFixed(4)}</span>
+                        {/* Defect Type / Classification */}
+                        <div className="defect-type-section">
+                            <div className="defect-type-label">Predicted Class</div>
+                            <div className={`defect-type-value ${result.is_defective ? 'defective' : 'normal'}`}>
+                                {result.defect_type}
                             </div>
                         </div>
+
+                        {/* Confidence Bar */}
+                        <div className="metric">
+                            <span className="metric-label">Confidence</span>
+                            <div className="progress-bar-bg">
+                                <div
+                                    className="progress-bar-fill"
+                                    style={{ width: result.confidence }}
+                                ></div>
+                            </div>
+                            <span className="metric-value">{result.confidence}</span>
+                        </div>
+
+                        {/* Per-Class Probabilities */}
+                        {result.class_probabilities && (
+                            <div className="classification-section">
+                                <h4>Class Probabilities</h4>
+                                {result.class_probabilities.map((item, index) => {
+                                    const isTop = index === 0;
+                                    const isDefectFree = item.class_name === 'defect free';
+                                    const pctWidth = `${(item.probability * 100).toFixed(1)}%`;
+                                    const pctLabel = `${(item.probability * 100).toFixed(1)}%`;
+
+                                    return (
+                                        <div className="class-prob-row" key={item.class_name}>
+                                            <span className={`class-name ${isTop ? 'top-class' : ''}`}>
+                                                {item.class_name}
+                                            </span>
+                                            <div className="class-bar-bg">
+                                                <div
+                                                    className={`class-bar-fill ${isTop ? 'top-bar' : ''} ${isDefectFree ? 'defect-free-bar' : ''}`}
+                                                    style={{ width: pctWidth }}
+                                                ></div>
+                                            </div>
+                                            <span className={`class-prob-value ${isTop ? 'top-value' : ''}`}>
+                                                {pctLabel}
+                                            </span>
+                                        </div>
+                                    );
+                                })}
+                            </div>
+                        )}
                     </div>
                 )}
             </main>
 
             <footer className="footer">
-                <p>Powered by ResNet18 & DCGAN • FabricGuard AI v1.0</p>
+                <p>Powered by ResNet50 &amp; DCGAN • FabricGuard AI v2.0</p>
             </footer>
         </div>
     );
