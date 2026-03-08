@@ -41,7 +41,19 @@ Run the `gan-fabric-model.ipynb` notebook. It is configured to:
 ### 2. Backend Server
 ```bash
 cd backend
-pip install fastapi uvicorn torch torchvision Pillow
+# Create virtual environment
+python -m venv venv
+
+# Activate virtual environment
+# On Linux/macOS:
+source venv/bin/activate
+# On Windows:
+# venv\Scripts\activate
+
+# Install dependencies
+pip install -r requirements.txt
+
+# Run the server
 python app.py
 ```
 
