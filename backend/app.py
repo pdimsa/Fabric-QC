@@ -7,6 +7,8 @@ from torchvision import models, transforms
 from torch.nn import functional as F
 from PIL import Image
 import io
+import base64
+from pydantic import BaseModel
 
 app = FastAPI()
 
@@ -87,6 +89,38 @@ transform = transforms.Compose([
 ])
 
 
+def run_inference(image: Image.Image) -> dict:
+    """Shared inference logic for both upload and live-cam endpoints."""
+    input_tensor = transform(image).unsqueeze(0).to(DEVICE)
+
+    with torch.no_grad():
+        output = model(input_tensor)
+        probabilities = F.softmax(output, dim=1).squeeze().cpu().numpy()
+
+    predicted_idx = int(probabilities.argmax())
+    predicted_class = CLASS_NAMES[predicted_idx]
+    confidence = float(probabilities[predicted_idx])
+
+    is_defective = predicted_class != 'defect free'
+
+    class_probabilities = []
+    for i, class_name in enumerate(CLASS_NAMES):
+        class_probabilities.append({
+            "class_name": class_name,
+            "probability": round(float(probabilities[i]), 4)
+        })
+    class_probabilities.sort(key=lambda x: x["probability"], reverse=True)
+
+    return {
+        "prediction": "Defect" if is_defective else "Normal",
+        "defect_type": predicted_class,
+        "confidence": f"{confidence * 100:.2f}%",
+        "confidence_value": round(confidence, 4),
+        "is_defective": is_defective,
+        "class_probabilities": class_probabilities
+    }
+
+
 @app.get("/")
 def home():
     return {"message": "Fabric Defect Detection API is running"}
@@ -98,41 +132,28 @@ async def predict(file: UploadFile = File(...)):
         # Read image
         contents = await file.read()
         image = Image.open(io.BytesIO(contents)).convert('RGB')
+        return run_inference(image)
+    except Exception as e:
+        return {"error": str(e)}
 
-        # Preprocess
-        input_tensor = transform(image).unsqueeze(0).to(DEVICE)
 
-        # Inference
-        with torch.no_grad():
-            output = model(input_tensor)
-            probabilities = F.softmax(output, dim=1).squeeze().cpu().numpy()
+# ──────────────────────────────────────────────────────────────────────────────
+# Live Camera Frame Endpoint — accepts base64-encoded JPEG/PNG frames
+# ──────────────────────────────────────────────────────────────────────────────
+class FramePayload(BaseModel):
+    frame: str  # base64-encoded image data (data URI or raw base64)
 
-        # Get predicted class
-        predicted_idx = int(probabilities.argmax())
-        predicted_class = CLASS_NAMES[predicted_idx]
-        confidence = float(probabilities[predicted_idx])
+@app.post("/predict/frame")
+async def predict_frame(payload: FramePayload):
+    try:
+        # Strip optional data-URI prefix (e.g. "data:image/jpeg;base64,")
+        frame_data = payload.frame
+        if "," in frame_data:
+            frame_data = frame_data.split(",", 1)[1]
 
-        # Determine if defective (any class other than "defect free")
-        is_defective = predicted_class != 'defect free'
-
-        # Build per-class probability list (sorted by probability descending)
-        class_probabilities = []
-        for i, class_name in enumerate(CLASS_NAMES):
-            class_probabilities.append({
-                "class_name": class_name,
-                "probability": round(float(probabilities[i]), 4)
-            })
-        class_probabilities.sort(key=lambda x: x["probability"], reverse=True)
-
-        return {
-            "prediction": "Defect" if is_defective else "Normal",
-            "defect_type": predicted_class,
-            "confidence": f"{confidence * 100:.2f}%",
-            "confidence_value": round(confidence, 4),
-            "is_defective": is_defective,
-            "class_probabilities": class_probabilities
-        }
-
+        image_bytes = base64.b64decode(frame_data)
+        image = Image.open(io.BytesIO(image_bytes)).convert('RGB')
+        return run_inference(image)
     except Exception as e:
         return {"error": str(e)}
 
