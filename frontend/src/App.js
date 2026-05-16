@@ -2,7 +2,7 @@ import React, { useState, useRef, useCallback, useEffect } from 'react';
 import axios from 'axios';
 import './App.css';
 
-const API_BASE = 'http://localhost:8000';
+const API_BASE = 'https://poojathmidimansa-fabricqcbe.hf.space';
 
 function App() {
     // ── Mode Toggle ──────────────────────────────────────────────────────
@@ -28,7 +28,6 @@ function App() {
     const [analyzing, setAnalyzing] = useState(false);
     const [fps, setFps] = useState(0);
     const [captureInterval, setCaptureInterval] = useState(1500); // ms between frames
-    const lastAnalysisTime = useRef(0);
 
     // ── Upload Handlers ──────────────────────────────────────────────────
     const handleFileChange = (file) => {
