@@ -28,7 +28,6 @@ function App() {
     const [analyzing, setAnalyzing] = useState(false);
     const [fps, setFps] = useState(0);
     const [captureInterval, setCaptureInterval] = useState(1500); // ms between frames
-    const lastAnalysisTime = useRef(0);
 
     // ── Upload Handlers ──────────────────────────────────────────────────
     const handleFileChange = (file) => {
