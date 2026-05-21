@@ -213,23 +213,115 @@ function App() {
         }
     }, [captureInterval, analyzing, captureAndAnalyze]);
 
+    // ── Helper: Get status color class based on prediction ───────────────
+    const getPredictionClass = (data) => {
+        if (!data) return '';
+        if (data.prediction === 'Non-Fabric') return 'non-fabric';
+        if (data.prediction === 'Normal') return 'normal';
+        return 'defect';
+    };
+
+    // ── Hierarchical Pipeline Visualization ──────────────────────────────
+    const HierarchyPipeline = ({ data }) => {
+        if (!data || !data.hierarchy) return null;
+        const h = data.hierarchy;
+
+        const stages = [
+            {
+                key: 'stage1',
+                label: 'Stage 1',
+                title: 'Fabric Detection',
+                icon: '🧵',
+                data: h.stage1_fabric,
+                active: true,
+                passed: h.stage1_fabric?.result === 'Fabric',
+                resultLabel: h.stage1_fabric?.result,
+            },
+            {
+                key: 'stage2',
+                label: 'Stage 2',
+                title: 'Defect Detection',
+                icon: '🔎',
+                data: h.stage2_defect,
+                active: !!h.stage2_defect,
+                passed: h.stage2_defect?.result === 'Defective',
+                resultLabel: h.stage2_defect?.result,
+            },
+            {
+                key: 'stage3',
+                label: 'Stage 3',
+                title: 'Defect Type',
+                icon: '🏷️',
+                data: h.stage3_type,
+                active: !!h.stage3_type,
+                passed: true,
+                resultLabel: h.stage3_type?.result,
+            },
+        ];
+
+        return (
+            <div className="hierarchy-pipeline">
+                {stages.map((stage, idx) => (
+                    <React.Fragment key={stage.key}>
+                        <div className={`pipeline-stage ${stage.active ? 'active' : 'inactive'} ${stage.active && stage.data ? (stage.passed ? 'passed' : 'stopped') : ''}`}>
+                            <div className="pipeline-stage-header">
+                                <span className="pipeline-icon">{stage.icon}</span>
+                                <div className="pipeline-stage-info">
+                                    <span className="pipeline-label">{stage.label}</span>
+                                    <span className="pipeline-title">{stage.title}</span>
+                                </div>
+                            </div>
+                            {stage.active && stage.data ? (
+                                <div className="pipeline-result">
+                                    <span className={`pipeline-result-value ${stage.passed ? 'pass' : 'stop'}`}>
+                                        {stage.resultLabel}
+                                    </span>
+                                    <span className="pipeline-confidence">
+                                        {(stage.data.confidence * 100).toFixed(1)}%
+                                    </span>
+                                </div>
+                            ) : !stage.active ? (
+                                <div className="pipeline-result">
+                                    <span className="pipeline-result-value skipped">Skipped</span>
+                                </div>
+                            ) : null}
+                        </div>
+                        {idx < stages.length - 1 && (
+                            <div className={`pipeline-connector ${stages[idx + 1].active ? 'active' : 'inactive'}`}>
+                                <div className="connector-line"></div>
+                                <div className="connector-arrow">▼</div>
+                            </div>
+                        )}
+                    </React.Fragment>
+                ))}
+            </div>
+        );
+    };
+
     // ── Results Component (shared) ───────────────────────────────────────
     const ResultDisplay = ({ data, compact = false }) => {
         if (!data) return null;
+        const predClass = getPredictionClass(data);
+
         return (
-            <div className={`card result-card ${data.prediction.toLowerCase()} ${compact ? 'compact' : ''}`}>
+            <div className={`card result-card ${predClass} ${compact ? 'compact' : ''}`}>
                 {/* Header */}
                 <div className="result-header">
                     <h3>{compact ? 'Live Result' : 'Analysis Result'}</h3>
-                    <span className={`status-badge ${data.prediction.toLowerCase()}`}>
+                    <span className={`status-badge ${predClass}`}>
                         {data.prediction}
                     </span>
                 </div>
 
+                {/* Hierarchical Pipeline Visualization */}
+                {!compact && data.hierarchy && (
+                    <HierarchyPipeline data={data} />
+                )}
+
                 {/* Defect Type / Classification */}
                 <div className="defect-type-section">
-                    <div className="defect-type-label">Predicted Class</div>
-                    <div className={`defect-type-value ${data.is_defective ? 'defective' : 'normal'}`}>
+                    <div className="defect-type-label">Final Classification</div>
+                    <div className={`defect-type-value ${data.is_defective ? 'defective' : data.is_fabric === false ? 'non-fabric-text' : 'normal'}`}>
                         {data.defect_type}
                     </div>
                 </div>
@@ -249,10 +341,17 @@ function App() {
                 {/* Per-Class Probabilities */}
                 {data.class_probabilities && !compact && (
                     <div className="classification-section">
-                        <h4>Class Probabilities</h4>
+                        <h4>
+                            {data.is_defective
+                                ? 'Defect Type Probabilities'
+                                : data.is_fabric === false
+                                    ? 'Fabric Detection Probabilities'
+                                    : 'Defect Detection Probabilities'}
+                        </h4>
                         {data.class_probabilities.map((item, index) => {
                             const isTop = index === 0;
                             const isDefectFree = item.class_name === 'defect free';
+                            const isNonFabric = item.class_name === 'non fabric';
                             const pctWidth = `${(item.probability * 100).toFixed(1)}%`;
                             const pctLabel = `${(item.probability * 100).toFixed(1)}%`;
 
@@ -263,7 +362,7 @@ function App() {
                                     </span>
                                     <div className="class-bar-bg">
                                         <div
-                                            className={`class-bar-fill ${isTop ? 'top-bar' : ''} ${isDefectFree ? 'defect-free-bar' : ''}`}
+                                            className={`class-bar-fill ${isTop ? 'top-bar' : ''} ${isDefectFree ? 'defect-free-bar' : ''} ${isNonFabric ? 'non-fabric-bar' : ''}`}
                                             style={{ width: pctWidth }}
                                         ></div>
                                     </div>
@@ -314,7 +413,7 @@ function App() {
                 {mode === 'upload' && (
                     <div className="card upload-card" id="upload-panel">
                         <h2>Defect Detection</h2>
-                        <p className="subtitle">Upload a fabric sample to analyze for defects using our GAN-augmented ResNet50 model.</p>
+                        <p className="subtitle">Upload a fabric sample for hierarchical analysis — Fabric Detection → Defect Detection → Defect Type Classification.</p>
 
                         <div
                             className={`drop-zone ${dragActive ? 'active' : ''} ${preview ? 'has-preview' : ''}`}
@@ -371,7 +470,7 @@ function App() {
                     <>
                         <div className="card live-card" id="live-panel">
                             <h2>Live Camera Detection</h2>
-                            <p className="subtitle">Point your camera at fabric samples for real-time defect analysis.</p>
+                            <p className="subtitle">Point your camera at fabric samples for real-time hierarchical defect analysis.</p>
 
                             {/* Camera Viewport */}
                             <div className={`camera-viewport ${cameraActive ? 'active' : ''}`}>
@@ -405,7 +504,7 @@ function App() {
 
                                 {/* Live result badge overlay */}
                                 {analyzing && liveResult && (
-                                    <div className={`live-badge ${liveResult.prediction.toLowerCase()}`}>
+                                    <div className={`live-badge ${getPredictionClass(liveResult)}`}>
                                         <span className="live-badge-dot"></span>
                                         <span className="live-badge-text">
                                             {liveResult.defect_type} — {liveResult.confidence}
@@ -479,7 +578,7 @@ function App() {
             </main>
 
             <footer className="footer">
-                <p>Powered by ResNet50 &amp; DCGAN • FabricGuard AI v2.0</p>
+                <p>Powered by Hierarchical ResNet50 &amp; DCGAN • FabricGuard AI v3.0</p>
             </footer>
         </div>
     );
